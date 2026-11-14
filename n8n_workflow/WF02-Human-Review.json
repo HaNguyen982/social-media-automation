@@ -1,0 +1,505 @@
+{
+  "name": "WF02 - Human Review & Content Approval",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Human Review & Content Approval",
+        "formDescription": "Nhập mã bài viết cần kiểm duyệt. Hãy kiểm tra nội dung bài viết trước khi đưa ra quyết định.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Content ID"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        240
+      ],
+      "id": "db5251f3-55ee-4c54-bc6c-b551fddbae9e",
+      "name": "Human Review & Content Approval",
+      "webhookId": "38cde769-ae94-4fa3-be67-d491a545eaa7"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://host.docker.internal:3000/api/contents/' + $json.contentId }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        368,
+        240
+      ],
+      "id": "be4ef526-9d9f-449b-8f69-6bf352ed0c72",
+      "name": "Get Content by ID"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "3e0ca1bd-2711-4080-b0df-c50012d1d435",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "PENDING_REVIEW",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        720,
+        240
+      ],
+      "id": "a355c52d-6182-41e8-b430-d9c03ea24664",
+      "name": "Check Content"
+    },
+    {
+      "parameters": {
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Content Title",
+              "fieldName": "title",
+              "defaultValue": "={{ $json.title }}"
+            },
+            {
+              "fieldLabel": "Topic",
+              "fieldName": "topic",
+              "defaultValue": "={{ $json.topic }}"
+            },
+            {
+              "fieldLabel": "Article Content",
+              "fieldType": "textarea",
+              "fieldName": "body",
+              "defaultValue": "={{ $json.body }}"
+            },
+            {
+              "fieldLabel": "AI Review Decision",
+              "fieldName": "aiDecision",
+              "defaultValue": "={{ $json.medicalReview.decision }}"
+            },
+            {
+              "fieldLabel": "AI Review Explanation",
+              "fieldType": "textarea",
+              "fieldName": "aiExplanation",
+              "defaultValue": "={{ $json.medicalReview.explanation }}"
+            },
+            {
+              "fieldLabel": "Human Review Decision",
+              "fieldType": "dropdown",
+              "fieldName": "humanDecision",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "APPROVE"
+                  },
+                  {
+                    "option": "REJECT"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1136,
+        112
+      ],
+      "id": "28c324a7-4012-4099-8c14-b38951954359",
+      "name": "Display Content for Review",
+      "webhookId": "f2ccb7e3-2565-4b60-adb2-038ed7d5a3bc"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "636995b8-3b65-4212-bcd7-9b36cf70b9ef",
+              "name": "=contentId",
+              "value": "={{ $('Get Content by ID').first().json._id }}",
+              "type": "string"
+            },
+            {
+              "id": "0deeb0b2-9b2a-4ed8-a10a-9e22be654421",
+              "name": "humanDecision",
+              "value": "={{ $json.humanDecision }}",
+              "type": "string"
+            },
+            {
+              "id": "838723c2-a776-4334-a72d-7a196eaebc7e",
+              "name": "reviewedAt",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "740b6d36-b924-481a-bfb1-71d65e05432c",
+              "name": "reviewer",
+              "value": "=HUMAN_REVIEWER",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1536,
+        112
+      ],
+      "id": "4da385de-e8e2-46fd-87b8-1d1ca5c24cef",
+      "name": "Prepare Human Review Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "94d3bb07-b5e1-42a0-b0c5-39d688818002",
+              "leftValue": "={{ $json.humanDecision }}",
+              "rightValue": "APPROVE",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1744,
+        112
+      ],
+      "id": "25765183-dff0-4b8f-b66d-f0289ec3b488",
+      "name": "Check Human Decision"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'http://host.docker.internal:3000/api/contents/' + $json.contentId + '/approve' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    reviewer: \"HUMAN_REVIEWER\",\n    reviewMessage: \"Bài viết đã được người kiểm duyệt phê duyệt.\"\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1936,
+        0
+      ],
+      "id": "f4871bd3-d635-4cc6-8d63-4d1206a3aead",
+      "name": "Approve Content",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lCrttaVO0mZoiSRS",
+          "name": "Header Auth account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'http://host.docker.internal:3000/api/contents/' + $json.contentId + '/reject' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    reviewer: \"HUMAN_REVIEWER\",\n    reviewMessage: \"Bài viết chưa đáp ứng yêu cầu kiểm duyệt.\"\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1952,
+        208
+      ],
+      "id": "54995b66-d5da-418b-8969-470cc711e46f",
+      "name": "Reject Content",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lCrttaVO0mZoiSRS",
+          "name": "Header Auth account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawId = $json[\"Content ID\"] ?? $json.contentId;\nconst contentId = String(rawId ?? \"\").trim();\n\nif (!/^[a-fA-F0-9]{24}$/.test(contentId)) {\n  throw new Error(\"Content ID không hợp lệ\");\n}\n\nreturn {\n  json: {\n    contentId\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        240
+      ],
+      "id": "890001bf-9846-4046-94a1-e192bdc17263",
+      "name": "Normalize Content ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = $json;\n\nconst errors = [];\n\nif (!content._id) {\n  errors.push(\"Không tìm thấy ID bài viết\");\n}\n\nif (!content.title || typeof content.title !== \"string\") {\n  errors.push(\"Tiêu đề bài viết không hợp lệ\");\n}\n\nif (!content.topic || typeof content.topic !== \"string\") {\n  errors.push(\"Chủ đề bài viết không hợp lệ\");\n}\n\nif (!content.body || typeof content.body !== \"string\") {\n  errors.push(\"Nội dung bài viết không hợp lệ\");\n}\n\nconst allowedStatuses = [\n  \"PENDING_REVIEW\",\n  \"APPROVED\",\n  \"REJECTED\"\n];\n\nif (!allowedStatuses.includes(content.status)) {\n  errors.push(\"Trạng thái bài viết không hợp lệ\");\n}\n\nif (errors.length > 0) {\n  throw new Error(\n    \"Dữ liệu bài viết không hợp lệ: \" + errors.join(\"; \")\n  );\n}\n\nreturn {\n  json: {\n    ...content,\n    retrievedContentValid: true\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        240
+      ],
+      "id": "5b99ba9f-6b86-450b-831f-a735b46da984",
+      "name": "Validate Retrieved Content"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8c8d2f44-9f4b-4aaa-8054-936ca154b5c5",
+              "name": "contentId",
+              "value": "={{ $json._id }}",
+              "type": "string"
+            },
+            {
+              "id": "80665239-4828-49ec-bd15-877303fa836c",
+              "name": "title",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "54dc5789-a154-4db3-b42a-8b1d5f049375",
+              "name": "body",
+              "value": "={{ $json.body }}",
+              "type": "string"
+            },
+            {
+              "id": "6d899f5a-13a5-46c9-9379-997b36fdb19c",
+              "name": "aiDecision",
+              "value": "={{ $json.medicalReview?.decision || \"NOT_REVIEWED\" }}",
+              "type": "string"
+            },
+            {
+              "id": "d6407b1e-3fd0-424c-9c1f-6ee5c9afced0",
+              "name": "aiExplanation",
+              "value": "={{ $json.medicalReview?.explanation || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "0a043c6b-f50a-49ea-b9a7-32ba0317bbae",
+              "name": "topic",
+              "value": "={{ $json.topic }}",
+              "type": "string"
+            },
+            {
+              "id": "a54ed87a-d380-4e83-8896-70fb5f14bfbe",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        928,
+        112
+      ],
+      "id": "e8c3c252-389d-4ed6-80cd-f04666252ef9",
+      "name": "Prepare Review Display Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const decision = String($json.humanDecision ?? \"\")\n  .trim()\n  .toUpperCase();\n\nif (![\"APPROVE\", \"REJECT\"].includes(decision)) {\n  throw new Error(\n    \"Quyết định kiểm duyệt không hợp lệ. Chỉ chấp nhận APPROVE hoặc REJECT.\"\n  );\n}\n\nreturn {\n  json: {\n    ...$json,\n    humanDecision: decision\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        112
+      ],
+      "id": "a024e96c-3bd0-4c01-9a1e-58d4638688cc",
+      "name": "Validate Human Decision"
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  json: {\n    success: false,\n    message: \"Bài viết không ở trạng thái chờ kiểm duyệt.\",\n    contentId: $json._id || \"\",\n    currentStatus: $json.status || \"UNKNOWN\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        352
+      ],
+      "id": "84a96de4-778b-439b-97e4-514c1d377090",
+      "name": "Handle Non-Pending Content"
+    }
+  ],
+  "connections": {
+    "Human Review & Content Approval": {
+      "main": [
+        [
+          {
+            "node": "Normalize Content ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Content by ID": {
+      "main": [
+        [
+          {
+            "node": "Validate Retrieved Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Content": {
+      "main": [
+        [
+          {
+            "node": "Prepare Review Display Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Non-Pending Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Display Content for Review": {
+      "main": [
+        [
+          {
+            "node": "Validate Human Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Human Review Result": {
+      "main": [
+        [
+          {
+            "node": "Check Human Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Human Decision": {
+      "main": [
+        [
+          {
+            "node": "Approve Content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Content ID": {
+      "main": [
+        [
+          {
+            "node": "Get Content by ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Retrieved Content": {
+      "main": [
+        [
+          {
+            "node": "Check Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Review Display Data": {
+      "main": [
+        [
+          {
+            "node": "Display Content for Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Human Decision": {
+      "main": [
+        [
+          {
+            "node": "Prepare Human Review Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}

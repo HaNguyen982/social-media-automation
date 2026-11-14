@@ -1,0 +1,427 @@
+{
+  "name": "WF01-CreateAutomatic",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        176,
+        272
+      ],
+      "id": "042b0d86-a6bb-489f-aa23-786ab7e97c19",
+      "name": "Schedule Trigger",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst topics = [\n  { title: 'Thói quen uống nước hợp lý', topic: 'Sức khỏe hằng ngày' },\n  { title: 'Tầm quan trọng của giấc ngủ', topic: 'Giấc ngủ' },\n  { title: 'Lợi ích của vận động thường xuyên', topic: 'Vận động' },\n  { title: 'Cách xây dựng bữa ăn cân bằng', topic: 'Dinh dưỡng' },\n  { title: 'Thói quen vệ sinh giúp bảo vệ sức khỏe', topic: 'Phòng ngừa bệnh' }\n];\n\n// Dữ liệu đầu vào từ Schedule Trigger hoặc Webhook Trigger\nconst input = $input.first().json;\n\n// Webhook n8n thường đặt dữ liệu POST trong input.body\nconst body = input.body && typeof input.body === 'object'\n  ? input.body\n  : {};\n\n// Chỉ nhận các chuỗi hợp lệ\nfunction cleanText(value, maxLength) {\n  return typeof value === 'string'\n    ? value.trim().slice(0, maxLength)\n    : '';\n}\n\nconst customTopic = cleanText(body.topic, 150);\nconst customTitle = cleanText(body.suggestedTitle, 200);\n\n// Nếu không có chủ đề từ Webhook, tự chọn theo ngày\nconst dayIndex = Math.floor(Date.now() / 86400000);\nconst selected = topics[dayIndex % topics.length];\n\nconst isManual = customTopic.length > 0;\n\nreturn [{\n  json: {\n    topic: isManual ? customTopic : selected.topic,\n    suggestedTitle: isManual\n      ? (customTitle || customTopic)\n      : selected.title,\n    language: 'Vietnamese',\n    audience: 'Độc giả ở nhiều độ tuổi',\n    triggerMode: isManual ? 'MANUAL' : 'SCHEDULE'\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        80
+      ],
+      "id": "b61d0993-f043-4359-8855-0574eb5b132a",
+      "name": "Prepare Topic"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  ({\n    model: \"qwen2.5:3b\",\n    stream: false,\n    format: \"json\",\n    options: {\n      temperature: 0.3,\n      top_p: 0.8,\n      repeat_penalty: 1.2,\n      num_predict: 500,\n      seed: 42\n    },\n    messages: [\n      {\n        role: \"system\",\n        content: \"Bạn là biên tập viên nội dung sức khỏe bằng tiếng Việt. Chỉ viết bằng tiếng Việt tự nhiên. Không sử dụng tiếng Trung hoặc ngôn ngữ khác. Không lặp câu, không bịa số liệu y khoa. Trả về duy nhất JSON hợp lệ gồm title, topic, body và sourceUrls. Không tự tạo URL nguồn.\"\n      },\n      {\n        role: \"user\",\n        content: `Hãy viết bài đăng Facebook về chủ đề: ${$json.topic}. Nội dung khoảng 150-250 từ, dễ hiểu, phù hợp với công chúng. Không đưa ra chẩn đoán hoặc hướng dẫn điều trị.`\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        704,
+        80
+      ],
+      "id": "8de8fe3b-0f10-4ab8-a263-5ae758ced24b",
+      "name": "Ollama - Generate Article"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json.message?.content;\n\nif (!response) {\n  throw new Error(\"Ollama không trả về nội dung bài viết\");\n}\n\nlet article;\n\ntry {\n  article = typeof response === \"string\"\n    ? JSON.parse(response)\n    : response;\n} catch (error) {\n  throw new Error(\"Không thể phân tích JSON từ Ollama: \" + error.message);\n}\n\nconst title = article.title?.trim();\nconst topic = article.topic?.trim();\nconst body = (article.body || article.content)?.trim();\n\nif (!title || !topic || !body) {\n  throw new Error(\"Bài viết thiếu title, topic hoặc body\");\n}\n\nreturn {\n  json: {\n    title,\n    topic,\n    body,\n    sourceUrls: Array.isArray(article.sourceUrls)\n      ? article.sourceUrls\n      : [],\n    status: \"PENDING_REVIEW\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        80
+      ],
+      "id": "84648642-2926-4202-abb2-bd7f577100e9",
+      "name": "Parse AI Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const article = $json;\n\nconst errors = [];\n\nif (\n  typeof article.title !== \"string\" ||\n  article.title.trim().length < 10\n) {\n  errors.push(\"Tiêu đề không hợp lệ hoặc quá ngắn\");\n}\n\nif (\n  typeof article.topic !== \"string\" ||\n  article.topic.trim().length === 0\n) {\n  errors.push(\"Thiếu chủ đề bài viết\");\n}\n\nif (\n  typeof article.body !== \"string\" ||\n  article.body.trim().length < 100\n) {\n  errors.push(\"Nội dung bài viết không hợp lệ hoặc quá ngắn\");\n}\n\nif (!Array.isArray(article.sourceUrls)) {\n  errors.push(\"sourceUrls phải là một mảng\");\n} else {\n  for (const url of article.sourceUrls) {\n    try {\n      const parsedUrl = new URL(url);\n\n      if (![\"http:\", \"https:\"].includes(parsedUrl.protocol)) {\n        errors.push(\"URL nguồn không hợp lệ\");\n        break;\n      }\n    } catch {\n      errors.push(\"URL nguồn không đúng định dạng\");\n      break;\n    }\n  }\n}\n\nreturn {\n  json: {\n    ...article,\n    isValid: errors.length === 0,\n    validationErrors: errors\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        80
+      ],
+      "id": "5b0e7bc7-8d8f-442a-bf07-d94f1074ebae",
+      "name": "Validate Content1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "b5b1d382-968a-46a1-b7ed-270d873769c7",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1376,
+        80
+      ],
+      "id": "3895d9c0-842a-45f4-beb5-b8c427fe604a",
+      "name": "Content Valid?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  ({\n    model: \"qwen2.5:3b\",\n    stream: false,\n    format: \"json\",\n    options: {\n      temperature: 0.2,\n      top_p: 0.8,\n      repeat_penalty: 1.2,\n      num_predict: 400\n    },\n    messages: [\n      {\n        role: \"system\",\n        content: \"Bạn là hệ thống hỗ trợ kiểm duyệt nội dung sức khỏe. Hãy đánh giá tính chính xác, độ an toàn và mức độ đáng tin cậy của bài viết. Không tự ý khẳng định thông tin y tế thiếu căn cứ. Nếu phát hiện thông tin sai lệch, lời khuyên nguy hiểm hoặc tuyên bố không có bằng chứng, hãy đánh dấu NEEDS_REVIEW hoặc REJECTED. Trả về duy nhất JSON gồm các trường: decision (APPROVED, NEEDS_REVIEW hoặc REJECTED), medicalIssues (mảng các vấn đề phát hiện), explanation (giải thích ngắn bằng tiếng Việt). Không được coi việc bài viết có cấu trúc hợp lệ là bằng chứng cho tính chính xác y khoa.\"\n      },\n      {\n        role: \"user\",\n        content: `Hãy kiểm duyệt bài viết sau:\nTiêu đề: ${$json.title}\nChủ đề: ${$json.topic}\nNội dung: ${$json.body}`\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1616,
+        -32
+      ],
+      "id": "2a88c169-fd24-4637-8532-7fd905c200eb",
+      "name": "Medical Content Review"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.message?.content;\n\nif (!raw) {\n  throw new Error(\"Ollama không trả về kết quả kiểm duyệt\");\n}\n\nlet review;\n\ntry {\n  review = JSON.parse(raw);\n} catch (error) {\n  throw new Error(\"Không thể phân tích kết quả kiểm duyệt: \" + error.message);\n}\n\nconst article = $(\"Validate Content1\").item.json;\n\nconst allowedDecisions = [\n  \"APPROVED\",\n  \"NEEDS_REVIEW\",\n  \"REJECTED\"\n];\n\nif (!allowedDecisions.includes(review.decision)) {\n  throw new Error(\"Kết quả kiểm duyệt không hợp lệ\");\n}\n\nreturn {\n  json: {\n    ...article,\n    medicalReview: {\n      decision: review.decision,\n      medicalIssues: review.medicalIssues || [],\n      explanation: review.explanation || \"\"\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        -32
+      ],
+      "id": "98713b43-317d-4714-9532-a012daa596e4",
+      "name": "Parse Medical Review"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "44f0d45d-9129-4850-9683-46af8d580ad5",
+              "leftValue": "{{ $json.medicalReview.decision }}",
+              "rightValue": "APPROVED",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2064,
+        -32
+      ],
+      "id": "df3b2ae0-c77b-4168-b09b-3afd696816bd",
+      "name": "Medical Review Decision?"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst article = $json;\n\nreturn {\n  json: {\n    ...article,\n    status: \"PENDING_REVIEW\",\n    reviewStatus: \"WAITING_FOR_HUMAN\",\n    requiresHumanReview: true,\n    reviewMessage:\n      \"Bài viết có vấn đề y tế cần được con người kiểm tra trước khi phê duyệt.\"\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        64
+      ],
+      "id": "b0a1da44-d6d9-4f8e-af99-09981d98074c",
+      "name": "Prepare Manual Review"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/contents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \n  {\n    title: $json.title,\n    topic: $json.topic,\n    body: $json.body,\n    sourceUrls: $json.sourceUrls || [],\n    status: $json.status,\n    medicalReview: $json.medicalReview,\n    reviewStatus: $json.reviewStatus,\n    requiresHumanReview: $json.requiresHumanReview,\n    reviewMessage: $json.reviewMessage\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2512,
+        176
+      ],
+      "id": "1ba8f6c5-8a5b-4334-ab4b-d18e8d729d2b",
+      "name": "Save Content to MongoDB",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lCrttaVO0mZoiSRS",
+          "name": "Header Auth account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const article = $json;\n\nreturn {\n  json: {\n    ...article,\n    status: \"PENDING_REVIEW\",\n    reviewStatus: \"AI_REVIEW_PASSED_WAITING_FOR_HUMAN\",\n    requiresHumanReview: true,\n    reviewMessage:\n      \"AI chưa phát hiện vấn đề đáng chú ý. Bài viết vẫn cần con người kiểm tra trước khi xuất bản.\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        -128
+      ],
+      "id": "b6d6a7c8-7899-45a4-b59d-3b3d1a0f88d3",
+      "name": "Prepare Approved Review"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst article = $json;\n\nreturn {\n  json: {\n    ...article,\n    status: \"REJECTED\",\n    reviewStatus: \"INVALID_CONTENT\",\n    requiresHumanReview: false,\n    reviewMessage:\n      \"Bài viết không đạt yêu cầu kiểm tra cấu trúc. Không được phép xuất bản.\",\n    rejectedReason: article.validationErrors || []\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        176
+      ],
+      "id": "09a631a7-2214-451a-b12e-22b459641d88",
+      "name": "Prepare Invalid Content"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf01-generate-content",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        176,
+        80
+      ],
+      "id": "27f1ff34-05ab-4ea6-a971-aa668f07d205",
+      "name": "Webhook",
+      "webhookId": "8efe761b-cda8-4753-91da-ba5b9042b7a8",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ZSCO3szUjhAjv2uE",
+          "name": "Header Auth account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        []
+      ]
+    },
+    "Prepare Topic": {
+      "main": [
+        [
+          {
+            "node": "Ollama - Generate Article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Generate Article": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Validate Content1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Content1": {
+      "main": [
+        [
+          {
+            "node": "Content Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Valid?": {
+      "main": [
+        [
+          {
+            "node": "Medical Content Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Invalid Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Medical Content Review": {
+      "main": [
+        [
+          {
+            "node": "Parse Medical Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Medical Review": {
+      "main": [
+        [
+          {
+            "node": "Medical Review Decision?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Medical Review Decision?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Approved Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Manual Review": {
+      "main": [
+        [
+          {
+            "node": "Save Content to MongoDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Approved Review": {
+      "main": [
+        [
+          {
+            "node": "Save Content to MongoDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Invalid Content": {
+      "main": [
+        [
+          {
+            "node": "Save Content to MongoDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}
