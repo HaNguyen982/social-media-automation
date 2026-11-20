@@ -205,7 +205,7 @@ export interface AdminAuthResult {
 
 /**
  * Validates admin authentication for Route Handlers and mutating requests.
- *
+ * 
  * Sources checked in priority order:
  * 1. Cookie `admin_session` (Signed HMAC session token) -> authMethod: "cookie"
  * 2. Header `Authorization: Bearer <sessionToken | ADMIN_SECRET>` -> authMethod: "header"

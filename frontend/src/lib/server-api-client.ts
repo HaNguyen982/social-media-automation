@@ -1,6 +1,6 @@
 /**
  * Server-Side API Client for Next.js App Router (Route Handlers, Server Actions, SSR).
- *
+ * 
  * SECURITY MANDATES:
  * 1. Executes strictly on the server (Node.js runtime).
  * 2. Reads `INTERNAL_API_KEY` from process.env (NEVER exposed to the browser, no NEXT_PUBLIC_ prefix).

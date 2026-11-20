@@ -17,6 +17,13 @@ export enum MedicalReviewDecision {
   REJECTED = 'REJECTED',
 }
 
+export enum ReconciliationStatus {
+  NOT_REQUIRED = 'NOT_REQUIRED',
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  NEEDS_MANUAL_REVIEW = 'NEEDS_MANUAL_REVIEW',
+}
+
 export interface MedicalReview {
   decision: MedicalReviewDecision;
   medicalIssues: string[];
@@ -36,7 +43,11 @@ export interface ContentItem {
   reviewMessage?: string;
   reviewer?: string;
   reviewedAt?: string | null;
+  bufferPostId?: string;
+  reconciliationStatus?: ReconciliationStatus;
+  reconciliationNote?: string;
   facebookPostId?: string;
+  facebookPostUrl?: string;
   publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -61,4 +72,16 @@ export interface ReviewContentInput {
 
 export interface PublishContentInput {
   facebookPostId: string;
+}
+
+export interface TriggerWF03PublishInput {
+  contentId: string;
+}
+
+export interface TriggerWF03PublishResponse {
+  success: boolean;
+  message: string;
+  details?: string;
+  contentId?: string;
+  error?: string;
 }

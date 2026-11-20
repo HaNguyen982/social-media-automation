@@ -151,3 +151,41 @@ export function getMedicalReviewBadge(decision?: string) {
       };
   }
 }
+
+/**
+ * Format Reconciliation Status (Trạng thái đối soát xuất bản Facebook/Buffer)
+ */
+export function getReconciliationBadge(status?: string) {
+  switch (status) {
+    case "PENDING":
+      return {
+        label: "Đang chờ xác minh",
+        badgeClass:
+          "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
+        description: "Đang chờ xác minh kết quả đăng bài từ Buffer.",
+      };
+    case "NEEDS_MANUAL_REVIEW":
+      return {
+        label: "Cần kiểm tra kết quả Buffer/Facebook",
+        badgeClass:
+          "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40",
+        description:
+          "Có sự cố hoặc phản hồi không rõ ràng từ Buffer/Facebook, cần người quản trị đối soát thủ công.",
+      };
+    case "CONFIRMED":
+      return {
+        label: "Đối soát thành công",
+        badgeClass:
+          "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+        description: "Đã xác nhận bài viết xuất bản thành công trên Facebook.",
+      };
+    case "NOT_REQUIRED":
+    default:
+      return {
+        label: "Không cần đối soát",
+        badgeClass:
+          "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+        description: "Chưa kích hoạt hoặc không yêu cầu đối soát.",
+      };
+  }
+}

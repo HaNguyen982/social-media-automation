@@ -2,9 +2,11 @@ import { apiClient, ApiError } from "@/lib/api-client";
 import {
   ContentItem,
   ContentStatus,
+  ReconciliationStatus,
   CreateContentInput,
   ReviewContentInput,
   PublishContentInput,
+  TriggerWF03PublishResponse,
 } from "@/types/content";
 import { MOCK_CONTENTS } from "@/data/mock/mock-contents";
 
@@ -175,5 +177,61 @@ export const contentsService = {
     }
 
     return await apiClient.contents.publish(id, input);
+  },
+
+  /**
+   * Triggers the n8n WF03 Facebook publishing workflow for an approved content item.
+   * Calls the secure internal Next.js Route Handler /api/workflows/wf03/publish.
+   */
+  async triggerPublishFacebook(
+    contentId: string
+  ): Promise<TriggerWF03PublishResponse> {
+    if (isMockMode()) {
+      const index = memoryMockContents.findIndex((c) => c._id === contentId);
+      if (index !== -1) {
+        memoryMockContents[index] = {
+          ...memoryMockContents[index],
+          status: ContentStatus.PUBLISHING,
+          reconciliationStatus: ReconciliationStatus.PENDING,
+          reconciliationNote:
+            "Đang chờ xác minh kết quả đăng bài từ Buffer (Dữ liệu mô phỏng).",
+          updatedAt: new Date().toISOString(),
+        };
+        return {
+          success: true,
+          message: "Đã tiếp nhận yêu cầu xuất bản (Dữ liệu mô phỏng)",
+          details:
+            "Chế độ mô phỏng: Thao tác này chỉ cập nhật bộ nhớ tạm Mock data, tuyệt đối không gửi bài viết thật đến n8n hoặc Buffer.",
+          contentId,
+        };
+      }
+      throw new Error(`Không tìm thấy bài viết mô phỏng với ID: ${contentId}`);
+    }
+
+    const response = await fetch("/api/workflows/wf03/publish", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ contentId }),
+    });
+
+    let data: TriggerWF03PublishResponse;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(
+        `Không thể phân tích phản hồi từ máy chủ (HTTP ${response.status})`
+      );
+    }
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.message ||
+          `Kích hoạt xuất bản WF03 thất bại (HTTP ${response.status})`
+      );
+    }
+
+    return data;
   },
 };
