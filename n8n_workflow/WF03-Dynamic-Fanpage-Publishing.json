@@ -1,0 +1,922 @@
+{
+  "updatedAt": "2026-11-20T12:40:41.048Z",
+  "createdAt": "2026-11-20T09:50:12.204Z",
+  "id": "sb3fWNQ16evIvHbv",
+  "name": "WF03 - Dynamic Fanpage Publishing",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf03-publish-content",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        336
+      ],
+      "id": "53d25ef5-0b20-48a4-8e1b-5d1a135917cd",
+      "name": "Webhook Trigger",
+      "webhookId": "wf03-publish-content-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (!items || items.length === 0) {\n  return [{\n    json: {\n      isValid: false,\n      error: 'EMPTY_PAYLOAD',\n      message: 'Không nhận được dữ liệu payload trong yêu cầu.',\n      contentId: null\n    }\n  }];\n}\n\nconst raw = items[0].json;\nconst body = raw.body || raw;\nconst contentIdRaw = body.contentId;\nconst MONGO_ID_REGEX = /^[0-9a-fA-F]{24}$/;\n\nif (!contentIdRaw || typeof contentIdRaw !== 'string' || !MONGO_ID_REGEX.test(contentIdRaw.trim())) {\n  return [{\n    json: {\n      isValid: false,\n      error: 'INVALID_CONTENT_ID',\n      message: 'ID bài viết không hợp lệ hoặc thiếu (yêu cầu định dạng MongoDB ObjectId 24 ký tự hex).',\n      contentId: contentIdRaw || null\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    isValid: true,\n    contentId: contentIdRaw.trim(),\n    receivedAt: new Date().toISOString()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        336
+      ],
+      "id": "98f3e337-37d5-46cf-9de7-da10b8a249ba",
+      "name": "Validate Webhook Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "check-input-valid-cond",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "name": "filter.operator.true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        336
+      ],
+      "id": "2feb2c89-859b-4fe3-9a29-6aed3f0c9e8d",
+      "name": "Check Webhook Input Valid"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: false,\n  error: $json.error || 'INVALID_CONTENT_ID',\n  message: $json.message || 'contentId không hợp lệ.'\n}) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        592,
+        448
+      ],
+      "id": "225c6b0f-0224-4c87-b9a0-49cddf6876a7",
+      "name": "Respond Invalid Input"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Đã tiếp nhận yêu cầu',\n  contentId: $json.contentId\n}) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        592,
+        208
+      ],
+      "id": "e75553cb-39e8-4542-8e98-f5c2fca18c77",
+      "name": "Respond Webhook Accepted"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prep-api-base-url",
+              "name": "apiBaseUrl",
+              "value": "http://host.docker.internal:3000/api",
+              "type": "string"
+            },
+            {
+              "id": "prep-pub-mode",
+              "name": "publishingMode",
+              "value": "LIVE",
+              "type": "string"
+            },
+            {
+              "id": "prep-content-id",
+              "name": "contentId",
+              "value": "={{ $json.contentId }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-requested-at",
+              "name": "requestedAt",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        784,
+        208
+      ],
+      "id": "57dd0f94-3fe8-42bc-85b2-aa8636133b41",
+      "name": "Prepare Publishing Request"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Prepare Publishing Request').first().json.apiBaseUrl + '/contents/' + $('Prepare Publishing Request').first().json.contentId }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        208
+      ],
+      "id": "524750cb-60d8-44de-9e44-925c515e4e7f",
+      "name": "Get Content By ID",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (!items || items.length === 0 || items[0].json.error) {\n  throw new Error('Không thể tải thông tin bài viết từ NestJS backend.');\n}\n\nconst content = items[0].json;\nconst expectedContentId = $('Prepare Publishing Request').first().json.contentId;\nconst publishingMode = $('Prepare Publishing Request').first().json.publishingMode || 'SIMULATION';\n\nif (!content || !content._id || content._id !== expectedContentId) {\n  throw new Error(`Content ID mismatch. Expected: ${expectedContentId}, received: ${content?._id}`);\n}\n\nif (content.status !== 'APPROVED') {\n  throw new Error(`Content ${content._id} is not APPROVED (current: ${content.status}).`);\n}\n\nif (content.reviewStatus && content.reviewStatus !== 'HUMAN_APPROVED') {\n  throw new Error(`Content ${content._id} has not been approved by human reviewer.`);\n}\n\nif (content.requiresHumanReview === true) {\n  throw new Error(`Content ${content._id} still requires human review.`);\n}\n\nif (content.medicalReview?.decision && content.medicalReview.decision !== 'APPROVED') {\n  throw new Error(`Content ${content._id} did not pass medical review.`);\n}\n\nif (content.facebookPostId || content.publishedAt) {\n  throw new Error(`Content ${content._id} has already been published to Facebook.`);\n}\n\nif (content.reconciliationStatus === 'NEEDS_MANUAL_REVIEW') {\n  throw new Error(`Content ${content._id} is marked NEEDS_MANUAL_REVIEW. Check Buffer/Facebook before publishing.`);\n}\n\nif (typeof content.title !== 'string' || content.title.trim().length === 0) {\n  throw new Error(`Content ${content._id} has empty title.`);\n}\n\nif (typeof content.body !== 'string' || content.body.trim().length === 0) {\n  throw new Error(`Content ${content._id} has empty body.`);\n}\n\nreturn [{\n  json: {\n    ...content,\n    isValid: true,\n    validationMessage: `Dynamic content ${content._id} validated successfully`,\n    publishingMode: publishingMode\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        192
+      ],
+      "id": "d4f61a1a-8268-4631-af80-1e5fae058904",
+      "name": "Validate Dynamic Content"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prep-post-content-id",
+              "name": "contentId",
+              "value": "={{ $json._id }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-post-message",
+              "name": "postMessage",
+              "value": "={{ $json.title + '\\n\\n' + $json.body }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-post-mode",
+              "name": "publishingMode",
+              "value": "={{ $json.publishingMode || 'SIMULATION' }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-post-prepared-at",
+              "name": "preparedAt",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1424,
+        192
+      ],
+      "id": "58b2aa66-f31d-44c0-b22a-586c5066f2e0",
+      "name": "Prepare Facebook Post"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-mode-cond",
+              "leftValue": "={{ $json.publishingMode }}",
+              "rightValue": "LIVE",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1616,
+        192
+      ],
+      "id": "0adf89c9-5d0d-4889-917b-d674be4cd491",
+      "name": "Check Publishing Mode"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Prepare Publishing Request').first().json.apiBaseUrl + '/contents/' + $('Prepare Facebook Post').first().json.contentId + '/claim-publishing' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        32
+      ],
+      "id": "9e117f17-a38a-4731-a77e-be50db637d5d",
+      "name": "Claim Content for Publishing"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com/graphql",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=\n{{\n  JSON.stringify({\n    query: `mutation {\n      createPost(input: {\n        channelId: \"6af5ae0462b70b94b0071815\",\n        text: ${JSON.stringify($('Prepare Facebook Post').first().json.postMessage)},\n        assets: [],\n        metadata: { facebook: { type: post } },\n        mode: shareNow,\n        schedulingType: automatic,\n        needsApproval: false\n      }) {\n        __typename\n        ... on PostActionSuccess {\n          post {\n            id\n            status\n            text\n            sentAt\n            externalLink\n          }\n        }\n        ... on InvalidInputError {\n          message\n        }\n      }\n    }`\n  })\n}}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2064,
+        32
+      ],
+      "id": "c2769398-410e-4932-afd9-7a19af7d54d7",
+      "name": "Publish via Buffer",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "e8c6e570-59d1-4378-a590-845f8a544192",
+              "leftValue": "={{ $json.data.createPost.__typename }}",
+              "rightValue": "PostActionSuccess",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "5dda92a1-1ab4-4643-b2cf-ff8ce82e498d",
+              "leftValue": "={{ $json.data.createPost.post.status }}",
+              "rightValue": "sent",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2272,
+        -80
+      ],
+      "id": "e8db73e5-8d26-46a5-be0b-3221a33eb216",
+      "name": "Check Buffer Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst response = $input.first().json;\nconst result = response.data?.createPost;\nconst originalContent = $('Prepare Facebook Post').first().json;\n\nif (!originalContent.contentId) {\n  throw new Error('Missing original contentId.');\n}\n\nif (\n  result?.__typename !== 'PostActionSuccess' ||\n  result?.post?.status !== 'sent'\n) {\n  throw new Error('Buffer has not confirmed the post as sent.');\n}\n\nconst post = result.post;\n\nif (!post.id || !post.sentAt || !post.externalLink) {\n  throw new Error('Missing Buffer post information.');\n}\n\n// Không dùng new URL() vì n8n báo URL is not defined.\nconst link = post.externalLink.trim();\n\nconst match = link.match(\n  /^https:\\/\\/(?:www\\.|m\\.)?facebook\\.com\\/(\\d+_\\d+)\\/?(?:\\?.*)?$/\n);\n\nif (!match) {\n  throw new Error(\n    'Cannot verify Facebook Post ID from Buffer URL. Manual reconciliation required.'\n  );\n}\n\nreturn [{\n  json: {\n    contentId: originalContent.contentId,\n    bufferPostId: post.id,\n    facebookPostId: match[1],\n    facebookPostUrl: link,\n    publishingMode: 'LIVE',\n    publishingStatus: 'SENT',\n    publishedAt: post.sentAt,\n    postMessage: originalContent.postMessage\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2496,
+        -96
+      ],
+      "id": "da80b4a6-001e-4151-967d-115206433c9a",
+      "name": "Prepare Buffer Success Data",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Prepare Publishing Request').first().json.apiBaseUrl + '/contents/' + $json.contentId + '/publish' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=\n{{ JSON.stringify({\n  facebookPostId: $json.facebookPostId,\n  bufferPostId: $json.bufferPostId,\n  facebookPostUrl: $json.facebookPostUrl\n}) }}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2704,
+        -112
+      ],
+      "id": "9daedbac-a5dc-406f-bbe7-f0c9f1398dbd",
+      "name": "Update Published Content",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Prepare Publishing Request').first().json.apiBaseUrl + '/contents/' + $('Prepare Facebook Post').first().json.contentId + '/mark-manual-review' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  reconciliationNote: 'Publishing result requires manual reconciliation. Buffer may have sent the post. Verify Buffer and Facebook before retrying.'\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2416,
+        144
+      ],
+      "id": "8c502529-4728-41c3-b77c-a3bcddc574c2",
+      "name": "Mark Needs Manual Review"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Prepare Publishing Request').first().json.apiBaseUrl + '/contents/' + $('Prepare Facebook Post').first().json.contentId }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2928,
+        -96
+      ],
+      "id": "9b125135-70a5-45e4-bce5-2cc7825e657e",
+      "name": "Verify Content Status After Publish Error"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "4fe62f67-1c02-4641-b2c1-a0d05667233a",
+              "leftValue": "={{ $json.status }} (Expression)",
+              "rightValue": "PUBLISHED",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        3152,
+        -96
+      ],
+      "id": "c331973c-ee91-4f0a-b93b-c67099fedff5",
+      "name": "Verify Content Status After Publish Error1"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst post = $json;\n\nconst simulatedPostId = `SIMULATED_${Date.now()}`;\n\nreturn {\n  json: {\n    ...post,\n\n    // Mô phỏng đăng thành công\n    publishSuccess: true,\n    publishingStatus: 'SIMULATED',\n\n    // ID giả lập, không phải ID Facebook thật\n    simulatedPostId: simulatedPostId,\n\n    // Không ghi nhận đã đăng Facebook thật\n    facebookPostId: null,\n    publishedAt: null,\n\n    simulatedAt: new Date().toISOString(),\n\n    publishingMessage:\n      'Simulation successful. No post was sent to Facebook.',\n\n    logMessage:\n      'Simulation successful. No post was sent to Facebook.'\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        352
+      ],
+      "id": "1cbcf8eb-0586-4641-b402-c9b99d9db6eb",
+      "name": "Simulate Facebook Publishing"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "83855899-b445-4c7e-a92b-9a2f9a030dba",
+              "leftValue": "={{ $json.publishSuccess }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2064,
+        352
+      ],
+      "id": "9edb5ff1-eb7a-4498-b62b-18e16c99815b",
+      "name": "Check Publishing Result"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "db2e14a2-4935-4340-b53d-be00fef96fd8",
+              "name": "=logStatus",
+              "value": "={{   $json.publishingMode === 'SIMULATION'     ? 'SIMULATED'     : 'SUCCESS' }}",
+              "type": "string"
+            },
+            {
+              "id": "7156cf2f-8dc6-4093-bfc2-da638edc7af7",
+              "name": "logMessage",
+              "value": "={{ $json.publishingMessage }}",
+              "type": "string"
+            },
+            {
+              "id": "cc381fa2-36a9-484a-a56b-3157a61e6529",
+              "name": "contentId",
+              "value": "={{ $json.contentId }}",
+              "type": "string"
+            },
+            {
+              "id": "bf7077f1-232f-4afa-9ce8-7fea0cebd2d9",
+              "name": "facebookPostId",
+              "value": "={{ $json.facebookPostId }}",
+              "type": "string"
+            },
+            {
+              "id": "14912f95-005b-4df7-a061-b24d6a37ecbd",
+              "name": "loggedAt",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "35dfec4b-dff5-4717-89a9-47f040ac679e",
+              "name": "publishingMode",
+              "value": "={{ $json.publishingMode }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2288,
+        304
+      ],
+      "id": "3ef6ce04-1052-43a6-9533-203eededf60d",
+      "name": "Prepare Success Log"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/publishing-logs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  contentId: $json.contentId ?? $json._id,\n  logStatus: \"SIMULATED\",\n  logMessage: $json.logMessage ?? \"Simulation successful. No post was sent to Facebook.\",\n  publishingMode: \"SIMULATION\",\n  loggedAt: $now.toISO()\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2512,
+        304
+      ],
+      "id": "31da113c-f49f-4afe-a309-31b91f62c247",
+      "name": "Save Simulation Log"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3c147254-dadd-4c14-a19e-e0e8b434c5ca",
+              "name": "logStatus",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "0f1057f8-d645-477f-abbc-3c369c3751f2",
+              "name": "logMessage",
+              "value": "={{ $json.publishingMessage || 'Publishing simulation failed' }}",
+              "type": "string"
+            },
+            {
+              "id": "920ca778-332a-4647-b876-c49d241bdd4a",
+              "name": "=contentId",
+              "value": "={{ $json.contentId || $json._id }}",
+              "type": "string"
+            },
+            {
+              "id": "09e92090-465d-4f66-8a6c-e3e174970c36",
+              "name": "loggedAt",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "0d2f1699-43da-4bb4-bdf4-a3cff6e85eb4",
+              "name": "publishingMode",
+              "value": "=SIMULATION",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2288,
+        432
+      ],
+      "id": "5fe99c36-8ed8-4db1-be84-49834fd0ae3e",
+      "name": "Prepare Failure Log"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/publishing-logs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  contentId: $json.contentId || $json._id,\n  logStatus: \"FAILED\",\n  logMessage: $json.logMessage || \"Publishing simulation failed\",\n  publishingMode: \"SIMULATION\",\n  loggedAt: $now.toISO()\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2512,
+        432
+      ],
+      "id": "0c347108-9a0d-4fbc-ba9a-3534ec4f9b33",
+      "name": "Save Failure Log"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Webhook Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Webhook Input": {
+      "main": [
+        [
+          {
+            "node": "Check Webhook Input Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Webhook Input Valid": {
+      "main": [
+        [
+          {
+            "node": "Respond Webhook Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Webhook Accepted": {
+      "main": [
+        [
+          {
+            "node": "Prepare Publishing Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Publishing Request": {
+      "main": [
+        [
+          {
+            "node": "Get Content By ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Content By ID": {
+      "main": [
+        [
+          {
+            "node": "Validate Dynamic Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Dynamic Content": {
+      "main": [
+        [
+          {
+            "node": "Prepare Facebook Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Facebook Post": {
+      "main": [
+        [
+          {
+            "node": "Check Publishing Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Publishing Mode": {
+      "main": [
+        [
+          {
+            "node": "Claim Content for Publishing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Simulate Facebook Publishing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Content for Publishing": {
+      "main": [
+        [
+          {
+            "node": "Publish via Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish via Buffer": {
+      "main": [
+        [
+          {
+            "node": "Check Buffer Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Needs Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Buffer Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Buffer Success Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Needs Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Buffer Success Data": {
+      "main": [
+        [
+          {
+            "node": "Update Published Content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Needs Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Published Content": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Verify Content Status After Publish Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Content Status After Publish Error": {
+      "main": [
+        [
+          {
+            "node": "Verify Content Status After Publish Error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate Facebook Publishing": {
+      "main": [
+        [
+          {
+            "node": "Check Publishing Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Publishing Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Success Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Failure Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Success Log": {
+      "main": [
+        [
+          {
+            "node": "Save Simulation Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Failure Log": {
+      "main": [
+        [
+          {
+            "node": "Save Failure Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "1448d4df-efeb-492c-a066-03c894155901",
+  "activeVersionId": "1448d4df-efeb-492c-a066-03c894155901",
+  "versionCounter": 25,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-11-20T09:50:12.206Z",
+      "createdAt": "2026-11-20T09:50:12.206Z",
+      "role": "workflow:owner",
+      "workflowId": "sb3fWNQ16evIvHbv",
+      "projectId": "PF2JUnS7M0EAL2Bz",
+      "project": {
+        "updatedAt": "2026-11-10T08:10:26.157Z",
+        "createdAt": "2026-11-10T07:51:55.479Z",
+        "id": "PF2JUnS7M0EAL2Bz",
+        "name": "NGUYỄN HÀ <hantt.24it@vku.udn.vn>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "af6681da-dc28-4b91-9a22-6b66b8d1b624"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "WF03 Dynamic - v1.0 - LIVE Facebook Publishing",
+    "description": ""
+  }
+}
