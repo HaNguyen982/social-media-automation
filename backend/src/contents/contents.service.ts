@@ -175,6 +175,8 @@ export class ContentsService {
 
           $set: {
             status: ContentStatus.PUBLISHED,
+            reconciliationStatus: ReconciliationStatus.CONFIRMED,
+            reconciliationNote: '',
             bufferPostId: publishDto.bufferPostId ?? '',
             facebookPostId: publishDto.facebookPostId,
             facebookPostUrl: publishDto.facebookPostUrl ?? '',
